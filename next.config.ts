@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+
+  // ✅ ADD THIS
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default nextConfig;

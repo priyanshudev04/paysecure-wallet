@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { easeInOut, motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 
 const variants = {
@@ -13,7 +13,7 @@ const variants = {
     y: 0,
     transition: {
       duration: 0.3,
-      ease: [0.25, 0.46, 0.45, 0.94],
+      ease: easeInOut,
       when: "beforeChildren",
     },
   },
@@ -22,7 +22,7 @@ const variants = {
     y: -4,
     transition: {
       duration: 0.2,
-      ease: [0.25, 0.46, 0.45, 0.94],
+      ease: easeInOut,
     },
   },
 };
