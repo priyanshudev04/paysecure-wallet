@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase";
 import { verifyAccessToken } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
-    const token = req.headers
-      .get("cookie")
-      ?.match(/accessToken=([^;]+)/)?.[1];
+    const cookieStore = await cookies();
+    const token = cookieStore.get("accessToken")?.value;
 
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
     const hashedPin = await bcrypt.hash(pin, 10);
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from("users")
       .update({ transaction_pin: hashedPin })
       .eq("user_id", payload.userId);

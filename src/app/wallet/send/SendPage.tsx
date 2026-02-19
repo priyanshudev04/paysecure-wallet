@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Send, QrCode, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
@@ -122,7 +122,7 @@ export default function SendPage() {
               type="text"
               placeholder="Receiver phone number"
               value={receiverPhone}
-              onChange={(e) => setReceiverPhone(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReceiverPhone(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border text-sm"
             />
 
@@ -130,7 +130,7 @@ export default function SendPage() {
               type="number"
               placeholder="Enter amount"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAmount(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border text-sm"
             />
 
@@ -138,7 +138,7 @@ export default function SendPage() {
               type="password"
               placeholder="Enter 4-digit PIN"
               value={pin}
-              onChange={(e) => setPin(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPin(e.target.value)}
               maxLength={4}
               className="w-full px-4 py-3 rounded-xl border text-sm"
             />
@@ -174,7 +174,7 @@ export default function SendPage() {
               type="text"
               placeholder="Scanned phone number"
               value={receiverPhone}
-              onChange={(e) => setReceiverPhone(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReceiverPhone(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border text-sm"
             />
 
@@ -182,7 +182,7 @@ export default function SendPage() {
               type="number"
               placeholder="Enter amount"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAmount(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border text-sm"
             />
 
@@ -190,7 +190,7 @@ export default function SendPage() {
               type="password"
               placeholder="Enter 4-digit PIN"
               value={pin}
-              onChange={(e) => setPin(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPin(e.target.value)}
               maxLength={4}
               className="w-full px-4 py-3 rounded-xl border text-sm"
             />
