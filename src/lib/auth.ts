@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { NextResponse } from "next/server";
-import { randomUUID } from "crypto";
+
 
 const ACCESS_SECRET = new TextEncoder().encode(
   process.env.JWT_ACCESS_SECRET!
@@ -27,7 +27,7 @@ export async function signAccessToken(payload: JWTPayload) {
 export async function signRefreshToken(payload: JWTPayload) {
   return new SignJWT({
     ...payload,
-    jti: randomUUID(),
+    jti: crypto.randomUUID(),
   } as unknown as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("7d")
