@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   LogOut,
@@ -40,6 +40,34 @@ export default function DashboardPage() {
   const [addingMoney, setAddingMoney] = useState(false);
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<{ user_id: string; phone_number: string; name: string | null }[]>([]);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+    if (showNotifications) document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [showNotifications]);
+
+  const notifications = [
+    ...transactions.slice(0, 8).map((tx) => ({
+      id: tx.id || `tx-${tx.created_at}`,
+      title: tx.type === "credit" ? "Money added" : "Payment sent",
+      message: tx.description || (tx.type === "credit" ? `₹${tx.amount} credited` : `₹${tx.amount} debited`),
+      time: new Date(tx.created_at).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }),
+      type: tx.type,
+    })),
+  ].slice(0, 10);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -85,7 +113,7 @@ export default function DashboardPage() {
         const data = await res.json();
 
         if (res.ok) {
-          setTransactions(data.transactions);
+          setTransactions(data.transactions ?? []);
         }
       } catch (err) {
         console.error("Failed to fetch transactions");
@@ -94,6 +122,51 @@ export default function DashboardPage() {
 
     fetchTransactions();
   }, []);
+
+  useEffect(() => {
+    const handleSearchClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowSearchDropdown(false);
+      }
+    };
+    if (showSearchDropdown) document.addEventListener("click", handleSearchClickOutside);
+    return () => document.removeEventListener("click", handleSearchClickOutside);
+  }, [showSearchDropdown]);
+
+  useEffect(() => {
+    if (searchQuery.trim().length < 2) {
+      setSearchResults([]);
+      setShowSearchDropdown(false);
+      return;
+    }
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(searchQuery.trim())}`);
+        const data = await res.json();
+        if (res.ok) setSearchResults(data.users || []);
+        else setSearchResults([]);
+        setShowSearchDropdown(true);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        searchTimeoutRef.current = null;
+      }
+    }, 300);
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, [searchQuery]);
+
+  const handleSelectRecipient = useCallback(
+    (phone: string) => {
+      setSearchQuery("");
+      setSearchResults([]);
+      setShowSearchDropdown(false);
+      router.push(`/wallet/send?to=${encodeURIComponent(phone)}`);
+    },
+    [router]
+  );
 
   const handleLogout = async () => {
     try {
@@ -132,7 +205,9 @@ export default function DashboardPage() {
 
       toast.success("Money added successfully");
       setAddAmount("");
-      setBalance(prev => prev + Number(addAmount));
+      setUser((prev: any) =>
+        prev ? { ...prev, balance: data.balance } : prev
+      );
  
     } catch {
       toast.error("Failed to add money");
@@ -229,24 +304,110 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="relative hidden md:block">
+            <div className="relative hidden md:block" ref={searchRef}>
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                 size={16}
               />
               <input
                 type="text"
-                placeholder="Search..."
-                className="w-60 bg-gray-100/80 rounded-xl py-2.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B9F1]/20 focus:bg-white border border-transparent focus:border-[#00B9F1]/30 transition-all"
+                placeholder="Search phone or name to send money..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => searchResults.length > 0 && setShowSearchDropdown(true)}
+                className="w-72 bg-gray-100/80 rounded-xl py-2.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B9F1]/20 focus:bg-white border border-transparent focus:border-[#00B9F1]/30 transition-all"
               />
+              {showSearchDropdown && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="absolute left-0 right-0 top-full mt-1 w-72 max-h-64 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50"
+                >
+                  <div className="max-h-64 overflow-y-auto">
+                    {searchResults.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-gray-400 text-sm">
+                        No users found. Search by phone or name.
+                      </div>
+                    ) : (
+                      searchResults.map((u) => (
+                        <button
+                          key={u.user_id}
+                          type="button"
+                          onClick={() => handleSelectRecipient(u.phone_number)}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors"
+                        >
+                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-[#00B9F1] to-[#0077B6] flex items-center justify-center text-white font-bold text-sm">
+                            {u.name?.[0] || u.phone_number.slice(-2)}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-sm text-[#002970]">
+                              {u.name || `+91 ${u.phone_number}`}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {u.name ? `+91 ${u.phone_number}` : u.phone_number}
+                            </p>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              )}
             </div>
-            <button className="h-10 w-10 rounded-xl hover:bg-gray-100 flex items-center justify-center relative transition-colors">
-              <Bell size={20} className="text-gray-500" />
-              <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white" />
+            <div className="relative" ref={notifRef}>
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="h-10 w-10 rounded-xl hover:bg-gray-100 flex items-center justify-center relative transition-colors"
+              >
+                <Bell size={20} className="text-gray-500" />
+                {notifications.length > 0 && (
+                  <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white" />
+                )}
+              </button>
+              {showNotifications && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="absolute right-0 top-12 w-80 max-h-96 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50"
+                >
+                  <div className="px-4 py-3 border-b border-gray-100">
+                    <h3 className="font-bold text-[#002970]">Notifications</h3>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-8 text-center text-gray-400 text-sm">
+                        No notifications yet
+                      </div>
+                    ) : (
+                      notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          className="px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                        >
+                          <p className="font-semibold text-sm text-[#002970]">{n.title}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
+                          <p className="text-[10px] text-gray-400 mt-1">{n.time}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </div>
+            <button
+              onClick={() => router.push("/profile")}
+              className="h-10 w-10 rounded-xl overflow-hidden flex items-center justify-center bg-gradient-to-br from-[#00B9F1] to-[#0077B6] text-white font-bold text-sm shadow-lg shadow-blue-200/30 cursor-pointer hover:opacity-90 transition-opacity border-2 border-white"
+            >
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt="Profile"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span>{user?.name?.[0] || "U"}</span>
+              )}
             </button>
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#00B9F1] to-[#0077B6] flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-200/30 cursor-pointer">
-              U
-            </div>
           </div>
         </header>
 
@@ -400,44 +561,67 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {/* Transactions List */}
-          <div className="space-y-1">
-            {[...transactions]
-              .sort(
-                (a, b) =>
-                  new Date(b.created_at).getTime() -
-                  new Date(a.created_at).getTime()
-              )
-              .map((tx) => (
-                <div
-                  key={tx.id}
-                  className="flex items-center justify-between px-8 py-4 hover:bg-gray-50/50 transition-colors"
-                >
-                  <div>
-                    <p className="font-bold text-[#002970] text-sm">
-                      {tx.description}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {tx.source || "Wallet"} •{" "}
-                      {new Date(tx.created_at).toLocaleString()}
-                    </p>
-                  </div>
-
-                  <div className="text-right">
-                    <p
-                      className={`font-bold text-sm ${
-                        tx.type === "credit"
-                          ? "text-green-600"
-                          : "text-red-500"
-                      }`}
-                    >
-                      {tx.type === "credit" ? "+" : "-"} ₹
-                      {Number(tx.amount).toLocaleString("en-IN")}
-                    </p>
-                  </div>
+          {/* Recent Transactions */}
+          <motion.div
+            className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
+              <h3 className="font-bold text-lg text-[#002970]">Recent Transactions</h3>
+              <button
+                onClick={() => router.push("/transactions")}
+                className="text-sm font-semibold text-[#00B9F1] hover:text-[#0077B6] flex items-center gap-1"
+              >
+                View All <ChevronRight size={16} />
+              </button>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {transactions.length === 0 ? (
+                <div className="px-6 py-10 text-center text-gray-400 text-sm">
+                  No transactions yet. Add money or send money to get started.
                 </div>
-              ))}
-          </div>
+              ) : (
+                [...transactions]
+                  .sort(
+                    (a, b) =>
+                      new Date(b.created_at).getTime() -
+                      new Date(a.created_at).getTime()
+                  )
+                  .slice(0, 5)
+                  .map((tx) => (
+                    <div
+                      key={tx.id}
+                      className="flex items-center justify-between px-6 py-4 hover:bg-gray-50/50 transition-colors"
+                    >
+                      <div>
+                        <p className="font-bold text-[#002970] text-sm">
+                          {tx.description}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {tx.source || "Wallet"} •{" "}
+                          {new Date(tx.created_at).toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p
+                          className={`font-bold text-sm ${
+                            tx.type === "credit"
+                              ? "text-green-600"
+                              : "text-red-500"
+                          }`}
+                        >
+                          {tx.type === "credit" ? "+" : "-"} ₹
+                          {Number(tx.amount).toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+          </motion.div>
         </div>
       </main>
 

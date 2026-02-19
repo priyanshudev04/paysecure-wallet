@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase";
 import { cookies } from "next/headers";
 import { verifyAccessToken } from "@/lib/auth";
 import bcrypt from "bcryptjs";
@@ -29,11 +29,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 1️⃣ Get user
-    const { data: user, error } = await supabase
+    const { data: user, error } = await supabaseAdmin
       .from("users")
       .select("*")
       .eq("user_id", payload.userId)
-      .single();
+      .maybeSingle();
 
     if (error || !user) {
       return NextResponse.json(
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     if (!user.transaction_pin) {
       const hashedPin = await bcrypt.hash(newPin, 10);
 
-      await supabase
+      await supabaseAdmin
         .from("users")
         .update({ transaction_pin: hashedPin })
         .eq("user_id", user.user_id);
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     const hashedPin = await bcrypt.hash(newPin, 10);
 
-    await supabase
+    await supabaseAdmin
       .from("users")
       .update({ transaction_pin: hashedPin })
       .eq("user_id", user.user_id);

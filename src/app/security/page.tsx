@@ -9,6 +9,7 @@ export default function SecurityPage() {
   const router = useRouter();
 
   const [user, setUser] = useState<any>(null);
+  const [hasPin, setHasPin] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [oldPin, setOldPin] = useState("");
@@ -16,14 +17,25 @@ export default function SecurityPage() {
   const [confirmPin, setConfirmPin] = useState("");
   const [updating, setUpdating] = useState(false);
 
-  // Fetch user
+  // Fetch user and PIN status
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch("/api/auth/me");
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        setUser(data.user);
+        const [userRes, pinRes] = await Promise.all([
+          fetch("/api/auth/me"),
+          fetch("/api/wallet/pin-status"),
+        ]);
+
+        if (!userRes.ok) throw new Error();
+        const userData = await userRes.json();
+        setUser(userData.user);
+
+        if (pinRes.ok) {
+          const pinData = await pinRes.json();
+          setHasPin(pinData.hasPin ?? false);
+        } else {
+          setHasPin(false);
+        }
       } catch {
         router.push("/login");
       } finally {
@@ -31,8 +43,53 @@ export default function SecurityPage() {
       }
     };
 
-    fetchUser();
+    fetchData();
   }, [router]);
+
+  const handleSetPin = async () => {
+    if (!newPin || !confirmPin) {
+      toast.error("All fields are required");
+      return;
+    }
+
+    if (newPin.length !== 4) {
+      toast.error("PIN must be 4 digits");
+      return;
+    }
+
+    if (newPin !== confirmPin) {
+      toast.error("PINs do not match");
+      return;
+    }
+
+    try {
+      setUpdating(true);
+
+      const res = await fetch("/api/wallet/update-pin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ newPin }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "Failed to set PIN");
+        return;
+      }
+
+      toast.success("Transaction PIN set successfully");
+      setHasPin(true);
+      setNewPin("");
+      setConfirmPin("");
+    } catch {
+      toast.error("Something went wrong");
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   const handleUpdatePin = async () => {
     if (!oldPin || !newPin || !confirmPin) {
@@ -136,46 +193,60 @@ export default function SecurityPage() {
           </div>
         </div>
 
-        {/* Update PIN Card */}
+        {/* Set PIN / Change PIN Card */}
         <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
           <div className="flex items-center gap-3 mb-6">
             <Lock className="text-[#002970]" />
             <h3 className="text-xl font-bold text-[#002970]">
-              Change Transaction PIN
+              {hasPin ? "Change Transaction PIN" : "Set Transaction PIN"}
             </h3>
           </div>
 
+          <p className="text-sm text-gray-500 mb-4">
+            {hasPin
+              ? "Enter your current PIN and choose a new 4-digit PIN."
+              : "Create a 4-digit PIN to secure your transactions."}
+          </p>
+
           <div className="space-y-4">
-            <input
-              type="password"
-              placeholder="Enter current PIN"
-              value={oldPin}
-              onChange={(e) => setOldPin(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border text-sm"
-            />
+            {hasPin && (
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="Enter current PIN"
+                value={oldPin}
+                onChange={(e) => setOldPin(e.target.value.replace(/\D/g, ""))}
+                className="w-full px-4 py-3 rounded-xl border text-sm"
+              />
+            )}
 
             <input
               type="password"
-              placeholder="Enter new PIN (4 digits)"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder={hasPin ? "Enter new PIN (4 digits)" : "Enter PIN (4 digits)"}
               value={newPin}
-              onChange={(e) => setNewPin(e.target.value)}
+              onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
               className="w-full px-4 py-3 rounded-xl border text-sm"
             />
 
             <input
               type="password"
-              placeholder="Confirm new PIN"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="Confirm PIN"
               value={confirmPin}
-              onChange={(e) => setConfirmPin(e.target.value)}
+              onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
               className="w-full px-4 py-3 rounded-xl border text-sm"
             />
 
             <button
-              onClick={handleUpdatePin}
+              onClick={hasPin ? handleUpdatePin : handleSetPin}
               disabled={updating}
               className="w-full py-3 rounded-xl bg-[#002970] text-white font-bold"
             >
-              {updating ? "Updating..." : "Update PIN"}
+              {updating ? (hasPin ? "Updating..." : "Setting...") : hasPin ? "Update PIN" : "Set PIN"}
             </button>
           </div>
         </div>

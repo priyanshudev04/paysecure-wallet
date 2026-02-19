@@ -29,13 +29,22 @@ try {
   useMemory = true;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function redisSet(key: string, value: string, exSec: number) {
   if (!useMemory && redisClient) {
-    try {
-      await redisClient.set(key, value, { ex: exSec });
-      return;
-    } catch {
-      useMemory = true;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await redisClient.set(key, value, { ex: exSec });
+        return;
+      } catch (e) {
+        if (attempt === 0) {
+          await sleep(150);
+        } else {
+          useMemory = true;
+          break;
+        }
+      }
     }
   }
   memStore.set(key, { value, expiresAt: Date.now() + exSec * 1000 });
@@ -44,11 +53,18 @@ async function redisSet(key: string, value: string, exSec: number) {
 async function redisGet(key: string): Promise<string | null> {
   cleanExpired();
   if (!useMemory && redisClient) {
-    try {
-      const val = await redisClient.get(key);
-      return val as string | null;
-    } catch {
-      useMemory = true;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const val = await redisClient.get(key);
+        return val as string | null;
+      } catch (e) {
+        if (attempt === 0) {
+          await sleep(150);
+        } else {
+          useMemory = true;
+          break;
+        }
+      }
     }
   }
   const entry = memStore.get(key);
@@ -133,4 +149,18 @@ export async function checkRateLimit(phone: string) {
   const key = `ratelimit:otp:${phone}`;
   const count = await redisIncr(key);
   return count <= MAX_OTP_REQUESTS;
+}
+
+// Refresh token rotation: 7-day TTL (matches refresh token lifetime)
+const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60;
+
+export async function isRefreshTokenUsed(jti: string): Promise<boolean> {
+  const key = `refresh:used:${jti}`;
+  const val = await redisGet(key);
+  return val !== null;
+}
+
+export async function markRefreshTokenUsed(jti: string): Promise<void> {
+  const key = `refresh:used:${jti}`;
+  await redisSet(key, "1", REFRESH_TOKEN_TTL);
 }

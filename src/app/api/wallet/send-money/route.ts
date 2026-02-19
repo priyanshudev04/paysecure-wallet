@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase";
 import { cookies } from "next/headers";
 import { verifyAccessToken } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 
 export async function POST(req: NextRequest) {
   try {
-    /* ===========================
-       AUTH CHECK
-    ============================ */
+    /* ================= AUTH ================= */
 
     const cookieStore = await cookies();
     const token = cookieStore.get("accessToken")?.value;
@@ -19,62 +17,53 @@ export async function POST(req: NextRequest) {
 
     const payload = await verifyAccessToken(token);
 
-    if (!payload || !payload.userId) {
+    if (!payload?.userId) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
-    /* ===========================
-       REQUEST BODY
-    ============================ */
+    /* ================= BODY ================= */
 
-    const body = await req.json();
-    const receiverPhone = body.receiverPhone?.trim();
-    const amount = Number(body.amount);
-    const pin = body.pin;
+    const { receiverPhone, amount, pin } = await req.json();
 
-    if (!receiverPhone || !amount || amount <= 0 || !pin) {
-      return NextResponse.json(
-        { error: "Invalid input" },
-        { status: 400 }
-      );
+    const cleanPhone = receiverPhone?.trim();
+    const cleanAmount = Number(amount);
+
+    if (!cleanPhone || !cleanAmount || cleanAmount <= 0 || !pin) {
+      return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     }
 
-    /* ===========================
-       GET SENDER
-    ============================ */
+    /* ================= GET SENDER ================= */
 
-    const { data: sender, error: senderError } = await supabase
+    const { data: sender, error: senderError } = await supabaseAdmin
       .from("users")
       .select("*")
       .eq("user_id", payload.userId)
-      .single();
+      .maybeSingle();
 
-    if (senderError || !sender) {
-      return NextResponse.json(
-        { error: "Sender not found" },
-        { status: 404 }
-      );
+    if (senderError) {
+      console.error(senderError);
+      return NextResponse.json({ error: "Sender fetch failed" }, { status: 500 });
     }
 
-    // Prevent sending to yourself
-    if (sender.phone_number === receiverPhone) {
+    if (!sender) {
+      return NextResponse.json({ error: "Sender not found" }, { status: 404 });
+    }
+
+    if (sender.phone_number === cleanPhone) {
       return NextResponse.json(
         { error: "Cannot send money to yourself" },
         { status: 400 }
       );
     }
 
-    // Check balance
-    if (Number(sender.balance) < amount) {
+    if (Number(sender.balance) < cleanAmount) {
       return NextResponse.json(
         { error: "Insufficient balance" },
         { status: 400 }
       );
     }
 
-    /* ===========================
-       VERIFY PIN
-    ============================ */
+    /* ================= VERIFY PIN ================= */
 
     if (!sender.transaction_pin) {
       return NextResponse.json(
@@ -83,77 +72,72 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const isPinValid = await bcrypt.compare(
-      pin,
-      sender.transaction_pin
-    );
+    const isPinValid = await bcrypt.compare(pin, sender.transaction_pin);
 
     if (!isPinValid) {
-      return NextResponse.json(
-        { error: "Invalid PIN" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
     }
 
-    /* ===========================
-       GET RECEIVER
-    ============================ */
+    /* ================= GET RECEIVER ================= */
 
-    const { data: receiver, error: receiverError } = await supabase
+    const { data: receiver, error: receiverError } = await supabaseAdmin
       .from("users")
       .select("*")
-      .eq("phone_number", receiverPhone)
-      .single();
+      .eq("phone_number", cleanPhone)
+      .maybeSingle();
 
-    if (receiverError || !receiver) {
+    if (receiverError) {
+      console.error(receiverError);
+      return NextResponse.json({ error: "Receiver fetch failed" }, { status: 500 });
+    }
+
+    if (!receiver) {
       return NextResponse.json(
         { error: "Receiver not found" },
         { status: 404 }
       );
     }
 
-    /* ===========================
-       UPDATE BALANCES
-    ============================ */
+    /* ================= UPDATE BALANCES ================= */
 
-    const newSenderBalance = Number(sender.balance) - amount;
-    const newReceiverBalance = Number(receiver.balance) + amount;
+    const newSenderBalance = Number(sender.balance) - cleanAmount;
+    const newReceiverBalance = Number(receiver.balance) + cleanAmount;
 
-    const { error: deductError } = await supabase
+    const { error: deductError } = await supabaseAdmin
       .from("users")
       .update({ balance: newSenderBalance })
       .eq("user_id", sender.user_id);
 
     if (deductError) {
+      console.error(deductError);
       return NextResponse.json(
         { error: "Failed to deduct balance" },
         { status: 500 }
       );
     }
 
-    const { error: creditError } = await supabase
+    const { error: creditError } = await supabaseAdmin
       .from("users")
       .update({ balance: newReceiverBalance })
       .eq("user_id", receiver.user_id);
 
     if (creditError) {
+      console.error(creditError);
       return NextResponse.json(
         { error: "Failed to credit receiver" },
         { status: 500 }
       );
     }
 
-    /* ===========================
-       INSERT TRANSACTIONS
-    ============================ */
+    /* ================= INSERT TRANSACTIONS ================= */
 
-    const { error: transactionError } = await supabase
+    const { error: transactionError } = await supabaseAdmin
       .from("transactions")
       .insert([
         {
           user_id: sender.user_id,
           type: "debit",
-          amount,
+          amount: cleanAmount,
           description: `Sent to ${receiver.phone_number}`,
           source: "Wallet Transfer",
           category: "Transfer",
@@ -161,7 +145,7 @@ export async function POST(req: NextRequest) {
         {
           user_id: receiver.user_id,
           type: "credit",
-          amount,
+          amount: cleanAmount,
           description: `Received from ${sender.phone_number}`,
           source: "Wallet Transfer",
           category: "Transfer",
@@ -169,6 +153,7 @@ export async function POST(req: NextRequest) {
       ]);
 
     if (transactionError) {
+      console.error(transactionError);
       return NextResponse.json(
         { error: "Transaction logging failed" },
         { status: 500 }

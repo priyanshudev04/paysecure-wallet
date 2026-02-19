@@ -2,11 +2,17 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { checkRateLimit, setOtp } from '@/lib/redis';
 
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, '').replace(/^91(?=\d{10})/, '') || phone;
+}
+
 export async function POST(req: Request) {
   try {
-    const { phoneNumber } = await req.json();
+    const body = await req.json();
+    const raw = body?.phoneNumber || '';
+    const phoneNumber = normalizePhone(String(raw).trim());
 
-    if (!phoneNumber || !/^\+?[1-9]\d{1,14}$/.test(phoneNumber)) {
+    if (!phoneNumber || phoneNumber.length < 10 || !/^[1-9]\d{9,14}$/.test(phoneNumber)) {
       return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 });
     }
 

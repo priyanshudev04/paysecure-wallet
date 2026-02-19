@@ -1,15 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Send, QrCode, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SendPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const toParam = searchParams.get("to");
 
   const [mode, setMode] = useState<"phone" | "qr" | null>(null);
   const [receiverPhone, setReceiverPhone] = useState("");
+
+  useEffect(() => {
+    if (toParam?.trim()) {
+      setReceiverPhone(toParam.trim());
+      setMode("phone");
+    }
+  }, [toParam]);
   const [amount, setAmount] = useState("");
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { verifyAccessToken } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase";
 import { cookies } from "next/headers";
 
 export async function GET() {
   try {
-    const cookieStore = await cookies(); // 👈 FIX
+    const cookieStore = await cookies();
     const token = cookieStore.get("accessToken")?.value;
 
     if (!token) {
@@ -18,13 +18,14 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: user, error } = await supabase
+    const { data: user, error } = await supabaseAdmin
       .from("users")
       .select("*")
       .eq("user_id", payload.userId)
-      .single();
+      .maybeSingle();
 
     if (error || !user) {
+      console.error("Fetch Balance Error:", error);
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 

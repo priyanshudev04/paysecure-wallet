@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ResponsiveContainer,
   LineChart,
@@ -13,7 +14,7 @@ import {
   Cell,
   CartesianGrid,
 } from "recharts";
-import { ArrowUpRight, ArrowDownLeft, TrendingUp } from "lucide-react";
+import { ArrowUpRight, ArrowDownLeft, TrendingUp, ArrowLeft } from "lucide-react";
 
 interface Transaction {
   id: string;
@@ -24,6 +25,7 @@ interface Transaction {
 }
 
 export default function TransactionsPage() {
+  const router = useRouter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState("all");
@@ -38,7 +40,7 @@ export default function TransactionsPage() {
         const data = await res.json();
 
         if (res.ok) {
-          setTransactions(data.transactions);
+          setTransactions(data.transactions ?? []);
         }
       } catch {
         console.error("Failed to fetch transactions");
@@ -108,6 +110,7 @@ export default function TransactionsPage() {
     { name: "Income", value: totalIncome },
     { name: "Expense", value: totalExpense },
   ];
+  const hasPieData = totalIncome > 0 || totalExpense > 0;
 
   const COLORS = ["#16a34a", "#dc2626"];
 
@@ -129,6 +132,14 @@ export default function TransactionsPage() {
 
   return (
     <div className="p-8 bg-[#F7F8FC] min-h-screen space-y-8">
+      {/* Back Button */}
+      <button
+        onClick={() => router.push("/dashboard")}
+        className="flex items-center gap-2 text-[#002970] font-semibold mb-4 hover:text-[#00B9F1] transition-colors"
+      >
+        <ArrowLeft size={18} />
+        Back to Dashboard
+      </button>
 
       {/* Header */}
       <div className="flex justify-between items-center">
@@ -205,50 +216,67 @@ export default function TransactionsPage() {
         {/* Line Chart */}
         <div className="bg-white rounded-2xl p-6 shadow-sm">
           <h3 className="font-bold text-lg mb-4">Income Trend</h3>
-          <div style={{ width: "100%", height: 300 }}>
-            <ResponsiveContainer>
-              <LineChart data={lineData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Line
-                  type="monotone"
-                  dataKey="income"
-                  stroke="#002970"
-                  strokeWidth={3}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="w-full h-[300px]">
+            {lineData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={lineData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="income"
+                    stroke="#002970"
+                    strokeWidth={3}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                Add transactions to see the trend
+              </div>
+            )}
           </div>
         </div>
 
         {/* Pie Chart */}
         <div className="bg-white rounded-2xl p-6 shadow-sm">
           <h3 className="font-bold text-lg mb-4">Income vs Expense</h3>
-          <div style={{ width: "100%", height: 300 }}>
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  outerRadius={100}
-                  label
-                >
-                  {pieData.map((_, index) => (
-                    <Cell key={index} fill={COLORS[index]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="w-full h-[300px]">
+            {hasPieData ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    outerRadius={100}
+                    label
+                  >
+                    {pieData.map((_, index) => (
+                      <Cell key={index} fill={COLORS[index]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                Add transactions to see the chart
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Transaction List */}
       <div className="bg-white rounded-2xl shadow-sm divide-y">
-        {transactions.map((tx) => (
+        {transactions.length === 0 ? (
+          <div className="p-8 text-center text-gray-400 text-sm">
+            No transactions yet. Add money or send money to get started.
+          </div>
+        ) : (
+        transactions.map((tx) => (
           <div
             key={tx.id}
             className="flex justify-between items-center p-4"
@@ -271,7 +299,8 @@ export default function TransactionsPage() {
               {Number(tx.amount).toLocaleString("en-IN")}
             </p>
           </div>
-        ))}
+        ))
+        )}
       </div>
     </div>
   );

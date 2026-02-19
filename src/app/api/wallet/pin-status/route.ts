@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase";
 import { verifyAccessToken } from "@/lib/auth";
 
 export async function GET() {
@@ -18,11 +18,11 @@ export async function GET() {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
-    const { data: user, error } = await supabase
+    const { data: user, error } = await supabaseAdmin
       .from("users")
       .select("transaction_pin")
       .eq("user_id", payload.userId)
-      .single();
+      .maybeSingle();
 
     if (error || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
